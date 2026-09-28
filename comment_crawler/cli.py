@@ -122,7 +122,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> int:
     configure_console_encoding()
-    args = build_argument_parser().parse_args(argv)
+    temporary_parser = build_argument_parser()
+    args =temporary_parser.parse_args(argv)
     keyword = args.keyword.strip()
     if not keyword:
         print("Keyword cannot be empty.", file=sys.stderr)
