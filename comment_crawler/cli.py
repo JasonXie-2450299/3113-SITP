@@ -31,7 +31,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("keyword", help="Keyword used to search Bilibili videos.")
     parser.add_argument(
         "--output-dir",
-        default=".",
+        default="./output",
         help="Directory for CSV output (default: current directory).",
     )
     parser.add_argument(
