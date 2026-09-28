@@ -18,6 +18,7 @@ except ImportError as exc:  # pragma: no cover - checked before importing
     ) from exc
 
 from config import (
+    COMMENT_WEB_LOCATION,
     COMMENT_URL,
     COMMENT_WBI_URL,
     DANMAKU_SEG_URL,
@@ -70,8 +71,22 @@ class BilibiliClient:
         if proxy:
             self.session.proxies.update({"http": proxy, "https": proxy})
 
+        self._warm_guest_session()
         self._wbi_keys: Optional[tuple[str, str]] = None
         self._last_request_time = 0.0
+
+    def _warm_guest_session(self) -> None:
+        """Let Bilibili set anonymous tracking cookies before API calls."""
+        if "buvid3" in self.session.cookies or "buvid4" in self.session.cookies:
+            return
+        try:
+            self.session.get(
+                "https://www.bilibili.com/",
+                timeout=self.timeout,
+                allow_redirects=True,
+            )
+        except requests.RequestException:
+            pass
 
     def _wait_for_rate_limit(self) -> None:
         if self.delay <= 0:
@@ -181,6 +196,8 @@ class BilibiliClient:
         max_videos: int = 0,
         max_pages: int = 0,
         order: str = "totalrank",
+        published_after: Optional[int] = None,
+        published_before: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Search videos and return deduplicated metadata."""
         videos: List[Dict[str, Any]] = []
@@ -200,6 +217,10 @@ class BilibiliClient:
                 "page_size": 20,
                 "order": order,
             }
+            if published_after is not None:
+                params["pubtime_begin_s"] = published_after
+            if published_before is not None:
+                params["pubtime_end_s"] = published_before
             url = SEARCH_WBI_URL if used_wbi else SEARCH_URL
             try:
                 payload = self._request(url, params, use_wbi=used_wbi)
@@ -315,6 +336,7 @@ class BilibiliClient:
         """Fetch all root comments and nested replies for an aid."""
         rows: List[Dict[str, Any]] = []
         used_wbi = False
+        risk_retries = 0
         page = 0
         pagination_str: Optional[str] = None
         seen_rpids: set[str] = set()
@@ -328,6 +350,8 @@ class BilibiliClient:
                 "oid": aid,
                 "mode": 3,
                 "plat": 1,
+                "seek_rpid": "",
+                "web_location": COMMENT_WEB_LOCATION,
             }
             if pagination_str:
                 params["pagination_str"] = pagination_str
@@ -343,16 +367,21 @@ class BilibiliClient:
                     continue
                 raise
 
-            if isinstance(payload, dict) and payload.get("code") in RISK_CODES:
+            code = payload.get("code") if isinstance(payload, dict) else None
+            if code in RISK_CODES or code == -400:
                 if not used_wbi:
                     used_wbi = True
                     continue
+                if code == -400 and risk_retries < 2:
+                    risk_retries += 1
+                    time.sleep(1.0 + risk_retries)
+                    continue
                 raise ApiError(
                     f"Comment API denied request for aid {aid}: "
-                    f"{payload.get('message')}"
+                    f"{payload.get('message') if isinstance(payload, dict) else code}"
                 )
 
-            if not isinstance(payload, dict) or payload.get("code") != 0:
+            if not isinstance(payload, dict) or code != 0:
                 message = (
                     payload.get("message")
                     if isinstance(payload, dict)
@@ -360,6 +389,7 @@ class BilibiliClient:
                 )
                 raise ApiError(f"Comment API error for aid {aid}: {message}")
 
+            risk_retries = 0
             data = payload.get("data") or {}
             cursor = data.get("cursor") or {}
             replies = data.get("replies") or []

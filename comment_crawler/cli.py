@@ -16,7 +16,12 @@ from output import (
     VIDEO_METADATA_FIELDS,
     open_csv_writer,
 )
-from utils import configure_console_encoding, format_timestamp, sanitize_filename
+from utils import (
+    configure_console_encoding,
+    format_timestamp,
+    parse_date_arg,
+    sanitize_filename,
+)
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -28,6 +33,21 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--output-dir",
         default=".",
         help="Directory for CSV output (default: current directory).",
+    )
+    parser.add_argument(
+        "--comments-csv",
+        default=None,
+        help="Write comments to this CSV path instead of the keyword-based name.",
+    )
+    parser.add_argument(
+        "--danmaku-csv",
+        default=None,
+        help="Write danmaku to this CSV path instead of the keyword-based name.",
+    )
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="Append new rows to existing CSV files instead of overwriting them.",
     )
     parser.add_argument(
         "--max-videos",
@@ -58,6 +78,16 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default="totalrank",
         choices=["totalrank", "click", "pubdate", "dm", "stow", "scores"],
         help="Bilibili search order (default: totalrank).",
+    )
+    parser.add_argument(
+        "--start-date",
+        default=None,
+        help="Only include videos published on or after this date, YYYY-MM-DD.",
+    )
+    parser.add_argument(
+        "--end-date",
+        default=None,
+        help="Only include videos published on or before this date, YYYY-MM-DD.",
     )
     parser.add_argument(
         "--cookie",
@@ -100,8 +130,23 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     output_dir = Path(args.output_dir).expanduser()
     safe_keyword = sanitize_filename(keyword)
-    comments_path = output_dir / f"{safe_keyword}_comments.csv"
-    danmaku_path = output_dir / f"{safe_keyword}_danmaku.csv"
+    comments_path = (
+        Path(args.comments_csv).expanduser()
+        if args.comments_csv
+        else output_dir / f"{safe_keyword}_comments.csv"
+    )
+    danmaku_path = (
+        Path(args.danmaku_csv).expanduser()
+        if args.danmaku_csv
+        else output_dir / f"{safe_keyword}_danmaku.csv"
+    )
+
+    try:
+        published_after = parse_date_arg(args.start_date)
+        published_before = parse_date_arg(args.end_date, end_of_day=True)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
 
     client = BilibiliClient(
         cookie=args.cookie,
@@ -118,6 +163,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             max_videos=args.max_videos,
             max_pages=args.search_pages,
             order=args.order,
+            published_after=published_after,
+            published_before=published_before,
         )
     except ApiError as exc:
         print(f"Search failed: {exc}", file=sys.stderr)
@@ -128,10 +175,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     comments_file, comments_writer = open_csv_writer(
-        comments_path, COMMENT_FIELDS
+        comments_path, COMMENT_FIELDS, append=args.append
     )
     danmaku_file, danmaku_writer = open_csv_writer(
-        danmaku_path, DANMAKU_FIELDS
+        danmaku_path, DANMAKU_FIELDS, append=args.append
     )
 
     empty_metadata = {field: "" for field in VIDEO_METADATA_FIELDS}

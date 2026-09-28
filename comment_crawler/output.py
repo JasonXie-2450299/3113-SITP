@@ -66,11 +66,11 @@ def open_csv_writer(
     path: Path,
     fieldnames: List[str],
     *,
-    resume: bool = False,
+    append: bool = False,
 ) -> tuple[Any, csv.DictWriter]:
     path.parent.mkdir(parents=True, exist_ok=True)
-    file = path.open("a" if resume else "w", newline="", encoding="utf-8-sig")
+    file = path.open("a" if append else "w", newline="", encoding="utf-8-sig")
     writer = csv.DictWriter(file, fieldnames=fieldnames)
-    if not resume or file.tell() == 0:
+    if not append or file.tell() == 0:
         writer.writeheader()
     return file, writer

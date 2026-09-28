@@ -5,6 +5,7 @@ SEARCH_URL = f"{API_ROOT}/x/web-interface/search/type"
 SEARCH_WBI_URL = f"{API_ROOT}/x/web-interface/wbi/search/type"
 COMMENT_URL = f"{API_ROOT}/x/v2/reply/main"
 COMMENT_WBI_URL = f"{API_ROOT}/x/v2/reply/wbi/main"
+COMMENT_WEB_LOCATION = 1315875
 PAGELIST_URL = f"{API_ROOT}/x/player/pagelist"
 DANMAKU_URL = f"{API_ROOT}/x/v1/dm/list.so"
 DANMAKU_VIEW_URL = f"{API_ROOT}/x/v2/dm/web/view"
